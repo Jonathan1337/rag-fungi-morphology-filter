@@ -4,13 +4,17 @@
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/LangChain-Framework-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" alt="LangChain">
   <img src="https://img.shields.io/badge/Ollama-Local_LLM-000000?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama">
-  <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-FF6F00?style=for-the-badge" alt="ChromaDB">
+  <img src="https://img.shields.io/badge/FAISS-Vector_Store-3B5998?style=for-the-badge" alt="FAISS">
+  <img src="https://img.shields.io/badge/EasyOCR-Text_Extraction-FF6F00?style=for-the-badge" alt="EasyOCR">
+  <img src="https://img.shields.io/badge/Version-1.2.1-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
 </p>
 
-Sistema **RAG (Retrieval-Augmented Generation)** para filtragem e análise de dados micológicos em artigos acadêmicos. Desenvolvido com **Ollama**, **LangChain** e **ChromaDB** para busca semântica em morfologia fúngica.
+Sistema **RAG (Retrieval-Augmented Generation)** para filtragem e análise de dados micológicos em artigos acadêmicos. Desenvolvido com **Ollama**, **LangChain** e **FAISS** para busca semântica em morfologia fúngica.
 
 O sistema permite realizar perguntas em linguagem natural sobre o conteúdo de artigos científicos em PDF, retornando respostas contextualizadas e fundamentadas exclusivamente no conteúdo do documento.
+
+> 🆕 **Modo Multimodal v2**: Pipeline multimodal com **5 fases** — extração de imagens, **classificação automática**, **OCR pre-pass** (EasyOCR), **textualização contextualizada** (LLaVA) e **validação anti-alucinação** contra o texto do documento.
 
 ---
 
@@ -33,11 +37,15 @@ O sistema permite realizar perguntas em linguagem natural sobre o conteúdo de a
 Este projeto implementa um pipeline RAG completo que:
 
 1. **Carrega** documentos PDF de artigos científicos sobre morfologia fúngica.
-2. **Divide** o conteúdo em chunks (fragmentos) otimizados para busca semântica.
-3. **Gera embeddings** vetoriais utilizando o modelo `nomic-embed-text` via Ollama.
-4. **Armazena** os vetores em um banco de dados ChromaDB persistente.
-5. **Recupera** os trechos mais relevantes a partir de uma pergunta do usuário.
-6. **Gera respostas** contextualizadas usando o LLM `qwen3:8b` via Ollama.
+2. **Extrai imagens** embutidas no PDF com **classificação automática** de tipo (placas, microscopia, diagrama, etc.).
+3. **Pré-processa com OCR** (EasyOCR) para extrair rótulos, espécies e textos das imagens.
+4. **Gera descrições contextualizadas** via LLaVA com prompts específicos por tipo de imagem.
+5. **Valida descrições** contra o texto do documento, detectando alucinações e espécies fabricadas.
+6. **Divide** o conteúdo em chunks otimizados para busca semântica.
+7. **Gera embeddings** vetoriais utilizando o modelo `nomic-embed-text` via Ollama.
+8. **Armazena** os vetores em um índice FAISS local.
+9. **Recupera** os trechos mais relevantes a partir de uma pergunta do usuário.
+10. **Gera respostas** contextualizadas usando o LLM `qwen3:8b` via Ollama.
 
 O artigo utilizado como base de conhecimento é:
 > *"Morphological and Molecular Diversity of Aspergillus From Corn Grain"*
@@ -50,11 +58,31 @@ O artigo utilizado como base de conhecimento é:
 ┌─────────────┐    ┌──────────────────┐    ┌──────────────────┐
 │  PDF Input   │───▶│  Document Loader  │───▶│  Text Splitter   │
 │  (data/)     │    │  (PyPDFLoader)    │    │  (Recursive)     │
-└─────────────┘    └──────────────────┘    └────────┬─────────┘
-                                                     │
-                                                     ▼
+└──────┬──────┘    └──────────────────┘    └────────┬─────────┘
+       │                                            │
+       │  ┌──────────────────┐                      │
+       └─▶│  Image Extractor │                      │
+          │  + Classifier    │                      │
+          └────────┬─────────┘                      │
+                   ▼                                │
+          ┌──────────────────┐                      │
+          │  OCR Pre-Pass    │                      │
+          │  (EasyOCR)       │                      │
+          └────────┬─────────┘                      │
+                   ▼                                │
+          ┌──────────────────┐                      │
+          │ Image Textualizer│                      │
+          │ (LLaVA + Context)│                      │
+          └────────┬─────────┘                      │
+                   ▼                                │
+          ┌──────────────────┐                      │
+          │  Desc. Validator │                      │
+          │  (Anti-Halluc.)  │                      │
+          └────────┬─────────┘                      │
+                   │                                │
+                   ▼                                ▼
 ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  LLM Response    │◀───│  RAG Chain       │◀───│  ChromaDB        │
+│  LLM Response    │◀───│  RAG Chain       │◀───│  FAISS Index     │
 │  (StrOutput)     │    │  (LCEL Pipeline) │    │  (Vector Store)  │
 └──────────────────┘    └────────┬─────────┘    └────────┬─────────┘
                                  │                       │
@@ -87,24 +115,8 @@ ollama pull nomic-embed-text
 
 # Modelo LLM para geração de respostas
 ollama pull qwen3:8b
-```
 
-> **💡 Nota:** O modelo `qwen3:8b` requer aproximadamente **5 GB** de espaço em disco e pelo menos **8 GB de RAM** para execução confortável.
 
----
-
-## 🚀 Instalação
-
-### 1. Clone o repositório
-
-```bash
-git clone https://github.com/Jonathan1337/rag-fungi-morphology-filter.git
-cd rag-fungi-morphology-filter
-```
-
-### 2. Crie e ative um ambiente virtual
-
-```bash
 # Criar ambiente virtual
 python -m venv venv
 
@@ -118,7 +130,11 @@ source venv/bin/activate
 ### 3. Instale as dependências
 
 ```bash
-pip install langchain langchain-community langchain-ollama langchain-text-splitters chromadb pypdf python-dotenv
+# Dependências core
+pip install langchain langchain-community langchain-ollama langchain-text-splitters faiss-cpu pypdf python-dotenv PyMuPDF Pillow requests
+
+# Dependências para modo multimodal v2 (OCR + validação)
+pip install easyocr opencv-python-headless
 ```
 
 ### 4. Configure as variáveis de ambiente (opcional)
@@ -140,7 +156,7 @@ ollama list
 
 ## 💻 Uso
 
-### Execução padrão
+### Modo Texto (padrão)
 
 ```bash
 python rag_local.py
@@ -149,30 +165,56 @@ python rag_local.py
 Na primeira execução, o script irá:
 1. Carregar o PDF da pasta `data/`.
 2. Dividir o texto em chunks de 1000 caracteres.
-3. Criar embeddings e indexar no ChromaDB.
+3. Criar embeddings e indexar no FAISS.
 4. Realizar duas perguntas de exemplo sobre o documento.
 
-### Exemplo de saída
+### 🆕 Modo Multimodal (Pipeline v2)
 
-```
-loaded 15 page(s) from data/Morphological_and_Molecular_Diversity_of_Aspergillus_From_Corn_Grain.pdf
-Split into 42 chunks
-Initialized Ollama embeddings with model: nomic-embed-text
-Indexing 42 chunks...
-Indexing complete. Data saved to: chroma_db
-
-Querying RAG chain...
-Question: What is the main topic of the document?
-Response: The document discusses the morphological and molecular diversity of Aspergillus species isolated from corn grain...
+```bash
+python rag_local.py --multimodal
 ```
 
-### Personalizando perguntas
+Executa o pipeline multimodal completo em **5 fases**:
 
-Edite a seção `__main__` em `rag_local.py` para customizar suas consultas:
+| Fase | Descrição | Módulo |
+|:----:|-----------|--------|
+| 1 | **Extração de texto** — carrega e divide o PDF em chunks | `rag_local.py` |
+| 2 | **Extração + Classificação de imagens** — extrai imagens e classifica tipo | `image_extractor.py` |
+| 3 | **OCR Pre-Pass** — extrai rótulos, espécies e textos das imagens | `ocr_extractor.py` |
+| 4 | **Textualização Contextualizada** — gera descrições com prompts por tipo | `image_textualizer.py` |
+| 5 | **Validação Anti-Alucinação** — verifica espécies contra o documento | `description_validator.py` |
 
-```python
-query_question = "Quais espécies de Aspergillus foram identificadas?"
-query_rag(rag_chain, query_question)
+#### Tipos de imagem classificados
+
+| Tipo | Heurística | Prompt usado |
+|------|-----------|-------------|
+| `icon` | < 200×200px | Breve, sem contexto científico |
+| `plate_grid_row` | ratio > 2.5, largura > 800 | Placas de Petri macroscópicas |
+| `plate_grid_matrix` | ratio < 0.6, alta, largura > 1000 | Matriz de culturas |
+| `microscopy_panel` | ratio < 0.8, > 800px | Estruturas microscópicas |
+| `diagram` | > 800×800px, ~quadrado | Diagramas científicos |
+| `single_image` | fallback | Prompt genérico com guardrails |
+
+### Opções de CLI
+
+| Flag | Descrição | Default |
+|------|-----------|:-------:|
+| `--multimodal` | Ativa o modo multimodal | `False` |
+| `--vision-model` | Modelo de visão para textualização | `llava` |
+| `--llm-model` | Modelo LLM para respostas | `qwen3:8b` |
+| `--query` | Pergunta customizada | - |
+
+### Exemplos de uso
+
+```bash
+# Modo texto com pergunta customizada
+python rag_local.py --query "Quais espécies de Aspergillus foram identificadas?"
+
+# Modo multimodal com modelo de visão específico
+python rag_local.py --multimodal --vision-model llava
+
+# Pergunta sobre conteúdo visual
+python rag_local.py --multimodal --query "Describe the morphological features shown in the microscopy images."
 ```
 
 ---
@@ -182,15 +224,21 @@ query_rag(rag_chain, query_question)
 ```
 rag-fungi-morphology-filter/
 │
-├── 📄 rag_local.py          # Script principal do pipeline RAG
-├── 📂 data/                  # Diretório dos documentos PDF
-│   └── 📑 Morphological_and_Molecular_Diversity_of_Aspergillus_From_Corn_Grain.pdf
-├── 📂 chroma_db/             # Banco vetorial ChromaDB (gerado na execução)
-├── 📄 .env                   # Variáveis de ambiente (opcional)
-├── 📄 .gitignore             # Arquivos ignorados pelo Git
-├── 📄 LICENSE                # Licença MIT
-├── 📄 README.md              # Este arquivo
-└── 📄 SCRIPT_DETAILS.md      # Documentação detalhada do script
+├── 📄 rag_local.py              # Script principal — pipeline RAG (5 fases)
+├── 📄 image_extractor.py         # Extração + classificação de tipo de imagem
+├── 📄 image_textualizer.py       # Textualização contextualizada via LLaVA
+├── 📄 ocr_extractor.py           # OCR pre-pass via EasyOCR
+├── 📄 description_validator.py   # Validação anti-alucinação de descrições
+├── 📂 data/                      # Diretório dos documentos PDF
+│   ├── 📑 Morphological_and_Molecular_Diversity_of_Aspergillus_From_Corn_Grain.pdf
+│   └── 📂 extracted_images/      # Imagens extraídas (gerado na execução)
+├── 📂 faiss_index/               # Índice vetorial FAISS (gerado na execução)
+├── 📄 changelog.md               # Histórico de alterações
+├── 📄 .env                       # Variáveis de ambiente (opcional)
+├── 📄 .gitignore                 # Arquivos ignorados pelo Git
+├── 📄 LICENSE                    # Licença MIT
+├── 📄 README.md                  # Este arquivo
+└── 📄 SCRIPT_DETAILS.md          # Documentação detalhada do script
 ```
 
 ---
@@ -220,10 +268,15 @@ Os parâmetros principais podem ser ajustados diretamente no script:
 |-----------|--------|
 | **[LangChain](https://www.langchain.com/)** | Framework de orquestração para pipelines LLM |
 | **[Ollama](https://ollama.com/)** | Runtime local para execução de modelos de IA |
-| **[ChromaDB](https://www.trychroma.com/)** | Banco de dados vetorial para busca semântica |
+| **[FAISS](https://github.com/facebookresearch/faiss)** | Índice vetorial para busca semântica (Meta AI) |
+| **[EasyOCR](https://github.com/JaidedAI/EasyOCR)** | OCR deep learning para extração de texto de imagens |
+| **[OpenCV](https://opencv.org/)** | Pré-processamento de imagens para OCR |
 | **[PyPDF](https://pypdf.readthedocs.io/)** | Carregamento e parsing de arquivos PDF |
 | **[Qwen3 8B](https://ollama.com/library/qwen3)** | Modelo LLM para geração de respostas |
 | **[Nomic Embed Text](https://ollama.com/library/nomic-embed-text)** | Modelo de embeddings de texto |
+| **[LLaVA](https://ollama.com/library/llava)** | Modelo de visão para textualização multimodal |
+| **[PyMuPDF](https://pymupdf.readthedocs.io/)** | Extração de imagens de PDFs |
+| **[Pillow](https://pillow.readthedocs.io/)** | Manipulação e processamento de imagens |
 
 ---
 

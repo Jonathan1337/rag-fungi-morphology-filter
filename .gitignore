@@ -205,3 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific
+data/extracted_images/
+faiss_index/
+
+# Markdown files (except README and changelog)
+*.md
+!README.md
+!changelog.md
